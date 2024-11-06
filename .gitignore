@@ -1,0 +1,58 @@
+# Dependencies
+node_modules
+.pnp
+.pnp.js
+
+# Production
+dist
+electron/dist
+release
+build
+
+# IDE - VSCode
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+
+# IDE - WebStorm/IntelliJ
+.idea
+*.iml
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment
+.env
+.env.local
+.env.*.local
+.env.development
+.env.test
+.env.production
+
+# Cache
+.npm
+.eslintcache
+.stylelintcache
+.DS_Store
+Thumbs.db
+
+# Testing
+coverage
+*.lcov
+.nyc_output
+
+# Temporary files
+*.swp
+*.swo
+*~
+
+# Electron specific
+electron-builder.yml
+.electron-vue/

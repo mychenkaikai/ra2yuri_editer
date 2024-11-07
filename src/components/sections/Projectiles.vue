@@ -6,6 +6,7 @@
       v-model="currentProjectile" 
       placeholder="选择弹道类型" 
       class="projectile-select"
+      filterable
     >
       <el-option
         v-for="projectile in projectilesList"
@@ -21,8 +22,42 @@
         :key="key"
         :label="getDisplayLabel(key)"
       >
+        <!-- 碎片武器选择 -->
+        <div class="weapon-select-group" v-if="isShrapnelWeaponField(key)">
+          <el-select 
+            v-model="projectileData[key]"
+            :placeholder="'选择' + getDisplayLabel(key)"
+            @change="(val) => updateValue(key, val)"
+            class="select-with-button"
+            filterable
+          >
+            <template #default>
+              <el-option
+                v-for="weapon in weaponsList"
+                :key="weapon"
+                :label="getWeaponDisplayName(weapon)"
+                :value="weapon"
+              />
+            </template>
+            <template #prefix>
+              {{ projectileData[key] ? getWeaponDisplayName(projectileData[key]) : '无' }}
+            </template>
+          </el-select>
+          <el-button 
+            v-if="projectileData[key]"
+            type="primary" 
+            link
+            @click="navigateToWeapon(projectileData[key])"
+            class="edit-button"
+          >
+            <el-icon><Edit /></el-icon>
+            编辑武器
+          </el-button>
+        </div>
+
+        <!-- 其他字段保持不变 -->
         <el-switch 
-          v-if="isBooleanField(key)"
+          v-else-if="isBooleanField(key)"
           v-model="projectileData[key]"
           active-value="yes"
           inactive-value="no"
@@ -61,9 +96,14 @@ import { computed, ref, watch } from 'vue'
 import { useStore } from 'vuex'
 import { createLogger } from '@/utils/logger'
 import { projectilesList, getProjectileDisplayName } from '@/utils/projectiles'
+import { useRoute, useRouter } from 'vue-router'
+import { weaponsList, getWeaponDisplayName } from '@/utils/weapons'
+import { Edit } from '@element-plus/icons-vue'
 
 const logger = createLogger('Projectiles')
 const store = useStore()
+const route = useRoute()
+const router = useRouter()
 const currentProjectile = ref('')
 
 // 布尔型字段
@@ -104,7 +144,9 @@ const displayLabels: Record<string, string> = {
   'ROT': '转向速度',
   'Elasticity': '弹性',
   'Proximity': '接近引信',
-  'Image': '弹道图像'
+  'Image': '弹道图像',
+  'ShrapnelWeapon': '碎片武器',
+  'ShrapnelCount': '碎片数量'
 }
 
 // 注释说明
@@ -123,17 +165,40 @@ const comments: Record<string, string> = {
   'ROT': '弹道转向速度',
   'Elasticity': '弹跳弹性系数',
   'Proximity': '接近引信触发距离',
-  'Image': '弹道使用的图像'
+  'Image': '弹道使用的图像',
+  'ShrapnelWeapon': '弹道爆炸时产生的碎片武器类型',
+  'ShrapnelCount': '弹道爆炸时产生的碎片数量'
 }
 
 const isBooleanField = (key: string) => booleanFields.includes(key)
 const isNumericField = (key: string) => numericFields.includes(key)
 const getDisplayLabel = (key: string) => displayLabels[key] || key
 
+// 判断是否是碎片武器字段
+const isShrapnelWeaponField = (key: string) => key === 'ShrapnelWeapon'
+
+// 添加导航方法
+const navigateToWeapon = (weapon: string) => {
+  if (weapon) {
+    router.push({
+      path: '/weapons',
+      query: { weapon }
+    })
+  }
+}
+
 // 获取当前弹道数据
 const projectileData = computed(() => {
   if (!currentProjectile.value) return null
   const data = store.getters.getSectionData(currentProjectile.value)
+  
+  // 确保 ShrapnelWeapon 字段始终存在
+  if (data) {
+    if (!data.ShrapnelWeapon) {
+      data.ShrapnelWeapon = ''
+    }
+  }
+  
   logger.debug('Projectile data:', data)
   return data
 })
@@ -161,6 +226,18 @@ const updateValue = (key: string, value: string) => {
     value
   })
 }
+
+// 监听路由参数变化
+watch(
+  () => route.query.projectile,
+  (newProjectile) => {
+    if (newProjectile && typeof newProjectile === 'string') {
+      currentProjectile.value = newProjectile
+      logger.info('Projectile selected from route:', newProjectile)
+    }
+  },
+  { immediate: true }
+)
 </script>
 
 <style scoped>
@@ -185,5 +262,20 @@ const updateValue = (key: string, value: string) => {
 
 :deep(.el-form-item) {
   margin-bottom: 24px;
+}
+
+.weapon-select-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.select-with-button {
+  flex: 1;
+}
+
+.edit-button {
+  flex-shrink: 0;
+  margin-left: auto;
 }
 </style>

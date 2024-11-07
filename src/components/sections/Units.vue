@@ -12,6 +12,7 @@
           v-model="currentUnit" 
           placeholder="选择单位" 
           class="unit-select"
+          filterable
         >
           <el-option
             v-for="unit in units"
@@ -27,25 +28,42 @@
             :key="key"
             :label="getDisplayLabel(key)"
           >
-            <el-select 
-              v-if="isWeaponField(key)"
-              v-model="unitData[key]"
-              :placeholder="'选择' + getDisplayLabel(key)"
-              @change="(val) => updateValue(key, val)"
-            >
-              <el-option
-                v-for="weapon in weaponsList"
-                :key="weapon"
-                :label="getWeaponDisplayName(weapon)"
-                :value="weapon"
-              />
-            </el-select>
+            <div class="weapon-select-group" v-if="isWeaponField(key)">
+              <el-select 
+                v-model="unitData[key]"
+                :placeholder="'选择' + getDisplayLabel(key)"
+                @change="(val) => updateValue(key, val)"
+                filterable
+              >
+                <template #default>
+                  <el-option
+                    v-for="weapon in weaponsList"
+                    :key="weapon"
+                    :label="getWeaponDisplayName(weapon)"
+                    :value="weapon"
+                  />
+                </template>
+                <template #prefix>
+                  {{ unitData[key] ? getWeaponDisplayName(unitData[key]) : '' }}
+                </template>
+              </el-select>
+              <el-button 
+                v-if="unitData[key]"
+                type="primary" 
+                link
+                @click="navigateToWeapon(unitData[key])"
+              >
+                <el-icon><Edit /></el-icon>
+                编辑武器
+              </el-button>
+            </div>
             
             <el-select 
               v-else-if="isWarheadField(key)"
               v-model="unitData[key]"
               :placeholder="'选择' + getDisplayLabel(key)"
               @change="(val) => updateValue(key, val)"
+              filterable
             >
               <el-option
                 v-for="warhead in warheadsList"
@@ -91,6 +109,8 @@ import { useStore } from 'vuex'
 import { createLogger } from '@/utils/logger'
 import { weaponsList, getWeaponDisplayName } from '@/utils/weapons'
 import { warheadsList, getWarheadDisplayName } from '@/utils/warheads'
+import { useRouter } from 'vue-router'
+import { Edit } from '@element-plus/icons-vue'
 
 const logger = createLogger('Units')
 const store = useStore()
@@ -226,7 +246,7 @@ const categorizedUnits = computed(() => {
     'buildings': []
   }
 
-  // 从对象格式中提取单位名称
+  // 从对象格式中提取单位名称并排序
   const getTypeList = (sectionName: string) => {
     const section = store.state.configData[sectionName]
     if (!section) {
@@ -234,18 +254,28 @@ const categorizedUnits = computed(() => {
       return []
     }
     
-    // 过滤掉注释和特殊字符
-    return Object.values(section)
+    // 过滤并提取单位名称
+    const units = Object.values(section)
       .filter((name: string) => {
-        // 过滤掉注释
-        if (name.includes(';')) {
-          return false
-        }
-        // 过滤掉非单位项
+        if (name.includes(';')) return false
         const invalidPrefixes = ['List', 'UIName', 'Name']
         return !invalidPrefixes.some(prefix => name.startsWith(prefix))
       })
-      .map((name: string) => name.split(';')[0].trim()) // 移除可能的注释
+      .map((name: string) => name.split(';')[0].trim())
+
+    // 按是否有中文翻译进行排序
+    return units.sort((a, b) => {
+      const hasTranslationA = unitNames[a] !== undefined
+      const hasTranslationB = unitNames[b] !== undefined
+      
+      if (hasTranslationA && !hasTranslationB) return -1
+      if (!hasTranslationA && hasTranslationB) return 1
+      
+      // 如果都有或都没有翻译，按中文名称或原始名称排序
+      const nameA = unitNames[a] || a
+      const nameB = unitNames[b] || b
+      return nameA.localeCompare(nameB, 'zh-CN')
+    })
   }
 
   result['infantry'] = getTypeList('InfantryTypes')
@@ -253,8 +283,7 @@ const categorizedUnits = computed(() => {
   result['aircraft'] = getTypeList('AircraftTypes')
   result['buildings'] = getTypeList('BuildingTypes')
 
-  logger.debug('Processed infantry types:', result['infantry'])
-
+  logger.debug('Processed and sorted units:', result)
   return result
 })
 
@@ -265,7 +294,7 @@ const unitData = computed(() => {
     return null
   }
   
-  // �� store 获取单位节点数据
+  //  store 获取单位节点数据
   const data = store.getters.getSectionData(currentUnit.value)
   if (!data) {
     logger.warn(`No data found for unit: ${currentUnit.value}`)
@@ -279,10 +308,17 @@ const unitData = computed(() => {
 // 单位名称映射
 const unitNames: Record<string, string> = {
   // 步兵单位
+  'E1': '动员兵',
+  'E2': '征召步兵',
   'ENGINEER': '工程师',
-  'DOG': '警犬',
-  'GHOST': '幽灵',
+  'SENGINEER': '战斗工程师',
+  'YENGINEER': '尤里工程师',
+  'DOG': '��犬',
+  'ADOG': '盟军军犬',
+  'YADOG': '尤里军犬',
+  'GHOST': '海豹部队',
   'GGI': '重装大兵',
+  'JUMPJET': '火箭飞行兵',
   'CLEG': '超时空军团',
   'YURI': '尤里',
   'IVAN': '疯狂伊文',
@@ -294,10 +330,12 @@ const unitNames: Record<string, string> = {
   'ARND': '海豹部队',
   'FLAKT': '防空步兵',
   'SHOK': '磁暴步兵',
+  'SHK': '磁暴追猎者',
   'SNIPE': '狙击手',
   'VIRUS': '病毒狙击手',
   'CHRONO': '超时空兵',
   'INITIATE': '尤里新兵',
+  'INIT': '启动者',
   'SLAV': '奴隶矿工',
   'BRUTE': '尤里蛮兵',
   'HIJACKER': '载具劫持者',
@@ -308,6 +346,7 @@ const unitNames: Record<string, string> = {
   'YURIPR': '尤里总理',
   'PENTGEN': '五角大楼将军',
   'PRES': '总统',
+  'LUNR': '月球军',
   
   // 载具单位
   'MTNK': '灰熊坦克',
@@ -331,6 +370,16 @@ const unitNames: Record<string, string> = {
   'SUB': '潜艇',
   'CARR': '航空母舰',
   'DRED': '无畏战舰',
+  'DTRUCK': '爆炸卡车',
+  'CMIN': '超时空矿车',
+  'YMIN': '尤里矿车',
+  'BFRT': '战斗要塞',
+  'YHVR': '悬浮磁盘',
+  'MAGNETRON': '磁能坦克',
+  'CHAOS': '混沌编织者',
+  'MIND': '心灵控制车',
+  'DISK': '飞碟',
+  'DISKHOVER': '悬浮飞碟',
   
   // 空中单位
   'HIND': '雌鹿直升机',
@@ -342,25 +391,35 @@ const unitNames: Record<string, string> = {
   'ZEPH': '齐柏林飞艇',
   'KIROV': '基洛夫空艇',
   'DISK': '浮碟',
+  'SPYP': '间谍飞机',
+  'CMISL': '巡航导弹',
   
   // 建筑单位
   'GAPOWR': '盟军发电厂',
   'NAPOWR': '苏联发电厂',
+  'YAPVLT': '尤里发电厂',
   'GAWALL': '盟军围墙',
   'NAWALL': '苏联围墙',
+  'YAWALL': '尤里围墙',
   'GAPILE': '盟军兵营',
   'NAHAND': '苏联兵营',
+  'YABRCK': '尤里兵营',
   'GAWEAP': '盟军战车工厂',
   'NAWEAP': '苏联战车工厂',
+  'YAWEAP': '尤里战车工厂',
   'GADEPT': '盟军维修厂',
   'NADEPT': '苏联维修厂',
+  'YADEPT': '尤里维修厂',
   'GACNST': '盟军建造厂',
   'NACNST': '苏联建造厂',
+  'YACNST': '尤里建造厂',
   'GAAIRC': '盟军机场',
   'NAAIRC': '苏联机场',
+  'YAAIRC': '尤里机场',
   'GATECH': '盟军作战实验室',
   'NATECH': '苏联作战实验室',
-  'GASPYSAT': '间谍卫星',
+  'YATECH': '尤里作战实验室',
+  'GASPYSAT': '间谍卫星上行链路',
   'GAGAP': '防空缺口发生器',
   'GAWEAT': '天气控制装置',
   'NARADR': '雷达塔',
@@ -374,8 +433,37 @@ const unitNames: Record<string, string> = {
   'YAGNTC': '基因突变装置',
   'YAPPET': '心灵支配装置',
   'YAGRND': '地下工厂',
-  'YATECH': '尤里作战实验室',
-  'YAPVLT': '尤里发电厂'
+  'YAPSYT': '心灵信标',
+  'YAGGUN': '守卫机炮',
+  'YAPSYB': '心灵探测器',
+  
+  // 平民单位
+  'CIV1': '平民1',
+  'CIV2': '平民2',
+  'CIV3': '平民3',
+  'CIVA': '平民A',
+  'CIVB': '平民B',
+  'CIVC': '平民C',
+  'CIVBBP': '背包平民',
+  'CIVBFM': '农民',
+  'CIVBF': '女性平民',
+  'CIVBTM': '商人',
+  'CIVSFM': '女农民',
+  'CIVSF': '女平民2',
+  'CIVSTM': '人2',
+  
+  // 动物单位
+  'COW': '奶牛',
+  'POLARB': '北极熊',
+  
+  // 特殊单位
+  'JOSH': '约书亚',
+  'CAML': '骆驼',
+  'DNOA': '恐龙A',
+  'DNOB': '恐龙B',
+  'CLNT': '克隆体',
+  'STLN': '斯大林',
+  'EINS': '爱因斯坦'
 }
 
 // 修改显示名称函数，显示中英文
@@ -388,10 +476,16 @@ const getUnitDisplayName = (unit: string) => {
 watch(unitData, (newData) => {
   logger.info('Unit data changed:', newData)
   if (newData) {
+    // 更新数值字段
     Object.entries(newData).forEach(([key, value]) => {
       if (isNumericField(key)) {
         numericValues.value[key] = parseFloat(value)
         logger.debug(`Updated numeric value for ${key}:`, numericValues.value[key])
+      }
+      // 更新武器字段的显示
+      if (isWeaponField(key) && value) {
+        const weaponName = getWeaponDisplayName(value)
+        logger.debug(`Updated weapon display for ${key}:`, weaponName)
       }
     })
   }
@@ -412,6 +506,23 @@ const isWeaponField = (key: string) => weaponFields.includes(key)
 // 添加弹头字段判断
 const warheadFields = ['Warhead', 'EliteWarhead']
 const isWarheadField = (key: string) => warheadFields.includes(key)
+
+const router = useRouter()
+
+const navigateToWeapon = (weapon: string) => {
+  router.push({
+    path: '/weapons',
+    query: { weapon }
+  })
+}
+
+// 修改武器字段的显示逻辑
+const getDisplayValue = (key: string, value: string) => {
+  if (isWeaponField(key)) {
+    return getWeaponDisplayName(value)
+  }
+  return value
+}
 </script>
 
 <style scoped>
@@ -446,5 +557,15 @@ const isWarheadField = (key: string) => warheadFields.includes(key)
 
 .no-data {
   margin-top: 20px;
+}
+
+.weapon-select-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+:deep(.el-select) {
+  flex: 1;
 }
 </style>

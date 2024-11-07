@@ -53,10 +53,25 @@
 import { computed, ref, watch } from 'vue'
 import { useStore } from 'vuex'
 import { createLogger } from '@/utils/logger'
+import { useRoute } from 'vue-router'
 
 const logger = createLogger('Warheads')
 const store = useStore()
 const currentWarhead = ref('')
+
+const route = useRoute()
+
+// 监听路由参数变化
+watch(
+  () => route.query.warhead,
+  (newWarhead) => {
+    if (newWarhead && typeof newWarhead === 'string') {
+      currentWarhead.value = newWarhead
+      logger.info('Warhead selected from route:', newWarhead)
+    }
+  },
+  { immediate: true }
+)
 
 // 清理注释的辅助函数
 const cleanComment = (str: string) => {

@@ -1,0 +1,6 @@
+{
+    "diffEditor.renderSideBySide": true,
+    "diffEditor.ignoreTrimWhitespace": true,
+    "diffEditor.maxComputationTime": 5000,
+    "diffEditor.wordWrap": "off"
+}

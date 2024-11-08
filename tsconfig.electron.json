@@ -1,13 +1,16 @@
 {
     "compilerOptions": {
       "target": "ES2020",
-      "module": "commonjs",
-      "strict": true,
+      "module": "CommonJS",
+      "moduleResolution": "node",
       "esModuleInterop": true,
+      "outDir": "electron/dist",
+      "rootDir": "electron/src",
+      "strict": true,
+      "sourceMap": true,
       "skipLibCheck": true,
       "forceConsistentCasingInFileNames": true,
-      "outDir": "electron/dist",
-      "composite": true
     },
-    "include": ["electron/src/**/*"]
+    "include": ["electron/src/**/*"],
+    "exclude": ["node_modules", "src"]
   }

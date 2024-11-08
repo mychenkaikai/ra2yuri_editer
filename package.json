@@ -7,8 +7,9 @@
         "dev": "vite",
         "build": "vue-tsc && vite build",
         "electron:tsc": "tsc -p tsconfig.electron.json",
-        "electron:dev": "npm run electron:tsc && concurrently \"vite\" \"wait-on tcp:3000 && cross-env NODE_ENV=development electron .\"",
-        "electron:build": "npm run electron:tsc && vue-tsc && vite build && electron-builder"
+        "electron:dev": "concurrently \"npm run dev\" \"npm run electron:tsc\" \"wait-on tcp:3000 && cross-env NODE_ENV=development electron .\"",
+        "electron:build": "npm run prepare && npm run electron:tsc && vue-tsc && vite build && electron-builder",
+        "prepare": "node scripts/copyTemplates.js"
     },
     "dependencies": {
         "element-plus": "^2.3.0",
@@ -17,7 +18,7 @@
         "vuex": "^4.0.0"
     },
     "devDependencies": {
-        "@types/node": "^18.0.0", 
+        "@types/node": "^18.0.0",
         "@vitejs/plugin-vue": "^4.0.0",
         "concurrently": "^8.2.2",
         "cross-env": "^7.0.3",
@@ -27,23 +28,5 @@
         "vite": "^4.0.0",
         "vue-tsc": "^1.0.0",
         "wait-on": "^7.2.0"
-    },
-    "build": {
-        "appId": "com.ra2yr.editor",
-        "productName": "RA2YR Editor",
-        "directories": {
-            "output": "release"
-        },
-        "files": [
-            "dist/**/*",
-            "electron/**/*"
-        ],
-        "win": {
-            "target": "nsis"
-        }
-    },
-    "optionalDependencies": {
-        "electron": "^25.0.0",
-        "electron-builder": "^24.0.0"
     }
 }

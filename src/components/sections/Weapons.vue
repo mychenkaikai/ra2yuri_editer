@@ -2,7 +2,14 @@
   <div class="weapons-container">
     <h2>武器设置</h2>
     
-    <el-select v-model="currentWeapon" placeholder="选择武器" class="weapon-select" filterable>
+    <el-select 
+      v-model="currentWeapon" 
+      placeholder="选择武器" 
+      class="weapon-select"
+      filterable
+      :loading="store.state.isLoading"
+      :disabled="store.state.isLoading || !store.state.configData"
+    >
       <el-option
         v-for="weapon in weaponsList"
         :key="weapon"
@@ -10,6 +17,18 @@
         :value="weapon"
       />
     </el-select>
+
+    <div v-if="store.state.isLoading" class="loading-state">
+      <el-skeleton :rows="3" animated />
+    </div>
+    
+    <div v-else-if="!store.state.configData" class="no-data">
+      <el-alert
+        title="请先打开配置文件"
+        type="warning"
+        show-icon
+      />
+    </div>
 
     <el-form v-if="weaponData" label-width="200px" class="weapon-form">
       <el-form-item 
@@ -26,24 +45,18 @@
             class="select-with-button"
             filterable
           >
-            <template #default>
-              <el-option
-                v-for="projectile in projectilesList"
-                :key="projectile"
-                :label="getProjectileDisplayName(projectile)"
-                :value="projectile"
-              />
-            </template>
-            <template #prefix>
-              {{ weaponData[key] ? getProjectileDisplayName(weaponData[key]) : '' }}
-            </template>
+            <el-option
+              v-for="projectile in projectilesList"
+              :key="projectile"
+              :label="getProjectileDisplayName(projectile)"
+              :value="projectile"
+            />
           </el-select>
           <el-button 
             v-if="weaponData[key]"
             type="primary" 
             link
             @click="navigateToProjectile(weaponData[key])"
-            class="edit-button"
           >
             <el-icon><Edit /></el-icon>
             编辑弹道
@@ -59,24 +72,18 @@
             class="select-with-button"
             filterable
           >
-            <template #default>
-              <el-option
-                v-for="warhead in warheadsList"
-                :key="warhead"
-                :label="getWarheadDisplayName(warhead)"
-                :value="warhead"
-              />
-            </template>
-            <template #prefix>
-              {{ weaponData[key] ? getWarheadDisplayName(weaponData[key]) : '' }}
-            </template>
+            <el-option
+              v-for="warhead in warheadsList"
+              :key="warhead"
+              :label="getWarheadDisplayName(warhead)"
+              :value="warhead"
+            />
           </el-select>
           <el-button 
             v-if="weaponData[key]"
             type="primary" 
             link
             @click="navigateToWarhead(weaponData[key])"
-            class="edit-button"
           >
             <el-icon><Edit /></el-icon>
             编辑弹头
@@ -117,149 +124,38 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
-import { useStore } from 'vuex'
+import { computed, ref, watch, onMounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import { Edit } from '@element-plus/icons-vue'
 import { createLogger } from '@/utils/logger'
-import { warheadsList, getWarheadDisplayName } from '@/utils/warheads'
-import { projectilesList, getProjectileDisplayName } from '@/utils/projectiles'
-import { onMounted } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { store } from '@/store'
+import { weaponNames } from '@/utils/weapons'
 
 const logger = createLogger('Weapons')
-const store = useStore()
-const route = useRoute()
 const router = useRouter()
-const currentWeapon = ref('')
+const route = useRoute()
 
-// 武器名称映射
-const weaponNames: Record<string, string> = {
-  // 基础武器
-  'DefaultDeathWeapon': '默认死亡武器',
-  'MGUN': '动员兵机枪',
-  'CANNON': '灰熊坦克炮',
-  'Grenade': '动员兵手榴弹',
-  'Pistol': '间谍手枪',
-  'DogBite': '军犬撕咬',
-  'Sniper': '狙击手步枪',
-  'AssaultGun': '重装大兵步枪',
-  'ChainGun': '海豹链炮',
-
-  // 坦克器
-  '105mm': '灰熊坦克主炮',
-  '120mm': '天启坦克主炮',
-  '75mm': '轻型坦克主炮',
-  '90mm': '坦克杀手主炮',
-  '20mm': '防空步兵机炮',
-  '25mm': '神盾巡洋舰防空炮',
-  '30mm': '围攻直升机机炮',
-  '50Cal': '海豹部队重机枪',
-  '7.62mm': '动员兵机枪',
-  '12.7mm': '米格战机机炮',
-  'M60': '重装大兵机枪',
-  'M1Carbine': '海豹部队卡宾枪',
-  'M16': '重装大兵步枪',
-  'AK47': '鲍里斯步枪',
-
-  // 精英单位武器
-  'SABOTE': '精英坦克杀手主炮',
-  '20mmRapidE': '精英防空步兵炮',
-  'MindControlE': '精英尤里控制',
-  'MedusaE': '精英美杜莎',
-  'DoublePistolsE': '精英海豹双枪',
-  'AKME': '精英动员兵枪',
-  
-  // 超级武器
-  'IonCannon': '离子炮超武',
-  'NukeWeapon': '核弹超武',
-  'WeatherStormWeapon': '天气控制器',
-  'PsychicDominator': '心灵支配器',
-  'ChronoWeapon': '超时空武器',
-
-  // 防御建筑武器
-  'TeslaCoil': '特斯拉线圈',
-  'PrismTower': '光棱塔',
-  'Patriot': '爱国者导弹',
-  'GrandCannon': '巨炮',
-  'Vulcan': '火神机炮',
-
-  // 载具武器
-  'GAUSS': '磁暴坦克炮',
-  'COMET': '彗星导弹',
-  'APOC': '天启坦克炮',
-  'TGUN': '光棱坦克炮',
-  'V3Launcher': 'V3火箭车',
-  'TTNK': '特斯拉坦克',
-
-  // 步兵武器
-  'DESO': '辐射工兵枪',
-  'TESLA': '磁暴步兵枪',
-  'SHOCK': '磁暴追猎者枪',
-  'VIRUS': '病毒狙击手枪',
-  'PSYWAVE': '尤里心灵波',
-  'IvanBomb': '疯狂伊文炸弹',
-  'TanyaC4': '谭雅C4',
-  'BORIS': '���里斯AK',
-
-  // 尤里特殊武器
-  'CRMindControl': '尤里心灵控制',
-  'CRPsychicJab': '尤里心灵穿刺',
-  'CRVirusGun': '尤里病毒枪',
-  'CRSuperMindBlast': '尤里超级冲击',
-  'CRRadBeamWeapon': '尤里辐射光束',
-  
-  // 其他特
-
-  // 补充其他武器
-  'ParaDropBomb': '伞兵轰炸',
-  'IvanBombE': '精英疯狂伊文炸弹',
-  'TanyaC4E': '精英谭雅C4',
-  'VirusE': '精英病毒狙击手',
-  'SniperE': '精英狙击手',
-  'DragonE': '精英天龙导弹',
-  'VulcanE': '精英火神机炮',
-  'GrandCannonE': '精英巨炮',
-  'TeslaCoilE': '精英特斯拉线圈',
-  'PrismTowerE': '精英光棱塔',
-  'PatriotE': '精英爱国者导弹',
-  'V3LauncherE': '精英V3火箭',
-  'DemolisherE': '精英战术核弹',
-  'GAUSSE': '精英磁暴坦克',
-  'COMETE': '精英彗星导弹',
-  'APOCE': '精英天启坦克',
-  'DESOE': '精英辐射工兵',
-  'TESLAE': '精英磁暴步兵',
-  'SHOCKE': '精英磁暴追猎者',
-  'VIRUSE': '精英病毒狙击手',
-  'PSYWAVEE': '精英尤里',
-  'TGUNE': '精英光棱坦克',
-  'FLAKE': '精英防空步兵',
-  'MISSILEE': '精英导弹车',
-  'MGUNE': '精英机枪塔',
-  'CANNONE': '精英坦克炮塔'
-}
-
-// 修改武器列表获取逻辑
+// 定义 weaponsList 计算属性
 const weaponsList = computed(() => {
-  if (!store.state.configData) {
-    logger.warn('No config data available')
-    return []
-  }
+  if (!store.state.configData) return []
 
-  // 获取所有节名
   const sections = Object.keys(store.state.configData)
-  
-  // 过滤出所有武器相关的节
   const weaponSections = sections.filter(section => {
     const data = store.state.configData[section]
-    return data && (
+    if (!data) return false
+    
+    // 检查是否包含武器相关属性
+    return (
       data.Damage !== undefined || 
-      data.Warhead !== undefined
+      data.ROF !== undefined ||
+      data.Range !== undefined ||
+      data.Projectile !== undefined ||
+      data.Warhead !== undefined ||
+      data.IsMeteor !== undefined  // 添加陨石判断
     )
   })
 
-  logger.debug('Found weapon sections:', weaponSections)
-  
-  // 按是否有中文翻译排序
   return weaponSections.sort((a, b) => {
     const hasTranslationA = weaponNames[a] !== undefined
     const hasTranslationB = weaponNames[b] !== undefined
@@ -267,53 +163,40 @@ const weaponsList = computed(() => {
     if (hasTranslationA && !hasTranslationB) return -1
     if (!hasTranslationA && hasTranslationB) return 1
     
-    // 如果都有或都没有翻译，按中文名称或原始名称排序
     const nameA = weaponNames[a] || a
     const nameB = weaponNames[b] || b
     return nameA.localeCompare(nameB, 'zh-CN')
   })
 })
 
-// 修改显示名称函数，显示中英文
+const currentWeapon = ref('')
+
+// 获取武器显示名称
 const getWeaponDisplayName = (weapon: string) => {
+  if (!weapon) return ''
   const name = weaponNames[weapon]
-  
-  // 果是精英武器（以E结尾）且没有专门的中文名
-  if (!name && weapon.endsWith('E')) {
-    const baseWeapon = weapon.slice(0, -1)
-    const baseName = weaponNames[baseWeapon]
-    if (baseName) {
-      return `${baseName}(精英) (${weapon})`
-    }
-  }
-  
-  // 如果有中文名就显示中英文，否则只显示英文
   return name ? `${name} (${weapon})` : weapon
 }
 
 // 获取当前武器数据
 const weaponData = computed(() => {
-  if (!currentWeapon.value) {
-    logger.debug('No weapon selected')
-    return null
-  }
-  const data = store.getters.getSectionData(currentWeapon.value)
-  logger.debug(`Current weapon ${currentWeapon.value} data:`, data)
-  return data
+  if (!currentWeapon.value) return null
+  return store.getters.getSectionData(currentWeapon.value)
 })
 
 const numericValues = ref<Record<string, number>>({})
 
-// 监听武器数据变化,更新数值
+// 监听武器数据变化
 watch(weaponData, (newData) => {
-  logger.info('Weapon data changed:', newData)
   if (newData) {
+    // 更新数值字段
     Object.entries(newData).forEach(([key, value]) => {
       if (isNumericField(key)) {
-        numericValues.value[key] = parseFloat(value)
-        logger.debug(`Updated numeric value for ${key}:`, numericValues.value[key])
+        numericValues.value[key] = parseFloat(value as string)
       }
     })
+  } else {
+    numericValues.value = {}
   }
 }, { immediate: true })
 
@@ -337,6 +220,16 @@ watch(
     }
   }
 )
+
+// 监听配置数据变化
+watch(() => store.state.configData, (newData) => {
+  if (newData) {
+    const weaponParam = route.query.weapon
+    if (weaponParam && typeof weaponParam === 'string') {
+      currentWeapon.value = weaponParam
+    }
+  }
+})
 
 const numericFields = [
   'Damage',
@@ -388,12 +281,22 @@ const updateValue = (key: string, value: string) => {
     return
   }
   
-  logger.info(`Updating ${currentWeapon.value}.${key} to:`, value)
-  store.commit('updateConfigValue', {
-    section: currentWeapon.value,
-    key,
-    value
-  })
+  if (!store.state.configData) {
+    logger.warn('No config data available')
+    return
+  }
+
+  try {
+    logger.info(`Updating ${currentWeapon.value}.${key} to:`, value)
+    store.commit('updateConfigValue', {
+      section: currentWeapon.value,
+      key,
+      value
+    })
+  } catch (error) {
+    logger.error('Failed to update value:', error)
+    ElMessage.error('更新失败')
+  }
 }
 
 // 判断是否是弹头字段
@@ -432,9 +335,17 @@ const navigateToWarhead = (warhead: string) => {
   overflow-y: auto;
 }
 
+.loading-state {
+  margin-top: 20px;
+}
+
 .weapon-select {
   width: 100%;
   margin-bottom: 20px;
+}
+
+.no-data {
+  margin-top: 20px;
 }
 
 .weapon-form {
@@ -453,10 +364,6 @@ const navigateToWarhead = (warhead: string) => {
 
 :deep(.el-form-item) {
   margin-bottom: 24px;
-}
-
-.no-data {
-  margin-top: 20px;
 }
 
 .weapon-select-group {

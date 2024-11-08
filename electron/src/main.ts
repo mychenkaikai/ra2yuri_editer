@@ -1,61 +1,70 @@
-import { app, BrowserWindow, ipcMain, dialog, Menu, MenuItemConstructorOptions } from 'electron'
-import * as path from 'path'  // 修改这行
-import * as fs from 'fs/promises'  // 修改这行
+import { app, BrowserWindow, ipcMain, dialog } from 'electron'
+import * as path from 'path'
+import * as fs from 'fs/promises'
+
 let mainWindow: BrowserWindow | null = null
 
-function createMenu() {
-  const template: MenuItemConstructorOptions[] = [
-    {
-      label: '文件',
-      submenu: [
-        {
-          label: '打开',
-          accelerator: 'CmdOrCtrl+O',
-          click: async () => {
-            mainWindow?.webContents.send('menu-open-file')
-          }
-        },
-        {
-          label: '保存',
-          accelerator: 'CmdOrCtrl+S',
-          click: () => {
-            mainWindow?.webContents.send('menu-save-file')
-          }
-        },
-        { type: 'separator' },
-        { role: 'quit', label: '退出' }
-      ]
-    },
-    {
-      label: '编辑',
-      submenu: [
-        { role: 'undo', label: '撤销' },
-        { role: 'redo', label: '重做' },
-        { type: 'separator' },
-        { role: 'cut', label: '剪切' },
-        { role: 'copy', label: '复制' },
-        { role: 'paste', label: '粘贴' }
-      ]
-    },
-    {
-      label: '视图',
-      submenu: [
-        { role: 'reload', label: '刷新' },
-        { role: 'forceReload', label: '强制刷新' },
-        { type: 'separator' },
-        { role: 'toggleDevTools', label: '开发者工具' },
-        { type: 'separator' },
-        { role: 'resetZoom', label: '重置缩放' },
-        { role: 'zoomIn', label: '放大' },
-        { role: 'zoomOut', label: '缩小' },
-        { type: 'separator' },
-        { role: 'togglefullscreen', label: '全屏' }
-      ]
-    }
-  ]
+// 设置 IPC 处理程序
+function setupIpcHandlers() {
+  ipcMain.handle('open-file-dialog', async () => {
+    if (!mainWindow) throw new Error('Main window not available')
+    const { filePaths } = await dialog.showOpenDialog(mainWindow, {
+      properties: ['openFile'],
+      filters: [{ name: 'INI Files', extensions: ['ini'] }]
+    })
+    return filePaths[0]
+  })
 
-  const menu = Menu.buildFromTemplate(template)
-  Menu.setApplicationMenu(menu)
+  ipcMain.handle('read-file', async (_, filePath: string) => {
+    return await fs.readFile(filePath, 'utf8')
+  })
+
+  ipcMain.handle('save-file-dialog', async () => {
+    if (!mainWindow) throw new Error('Main window not available')
+    
+    const result = await dialog.showSaveDialog(mainWindow, {
+      filters: [{ name: 'INI Files', extensions: ['ini'] }]
+    })
+    
+    console.log('Save dialog result:', result)
+    return result.filePath
+  })
+
+  ipcMain.handle('write-file', async (_, { filePath, content }) => {
+    console.log('Writing file:', filePath)
+    try {
+      await fs.writeFile(filePath, content, 'utf8')
+      console.log('File written successfully')
+    } catch (error) {
+      console.error('Error writing file:', error)
+      throw error
+    }
+  })
+
+  ipcMain.handle('new-file', async () => {
+    if (!mainWindow) throw new Error('Main window not available')
+    
+    const { filePath, canceled } = await dialog.showSaveDialog(mainWindow, {
+      filters: [{ name: 'INI Files', extensions: ['ini'] }]
+    })
+
+    if (canceled || !filePath) {
+      return { success: false, message: '取消新建' }
+    }
+
+    const templatePath = process.env.NODE_ENV === 'development'
+      ? path.join(__dirname, '../../templates/Rulesmd.ini')
+      : path.join(__dirname, '../templates/Rulesmd.ini')
+    
+    await fs.copyFile(templatePath, filePath)
+    const content = await fs.readFile(filePath, 'utf8')
+    
+    return {
+      success: true,
+      content,
+      filePath
+    }
+  })
 }
 
 function createWindow() {
@@ -64,13 +73,8 @@ function createWindow() {
     height: 800,
     webPreferences: {
       nodeIntegration: true,
-      contextIsolation: false,
-      webSecurity: false
-    },
-    show: false,
-    minWidth: 800,
-    minHeight: 600,
-    backgroundColor: '#fff'
+      contextIsolation: false
+    }
   })
 
   if (process.env.NODE_ENV === 'development') {
@@ -80,84 +84,8 @@ function createWindow() {
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'))
   }
 
-  mainWindow.once('ready-to-show', () => {
-    mainWindow?.show()
-  })
-
-  mainWindow.on('closed', () => {
-    mainWindow = null
-  })
-
-  createMenu()
+  setupIpcHandlers()
 }
-
-// 添加文件对话框
-ipcMain.handle('open-file-dialog', async () => {
-  console.log('Received open-file-dialog request')
-  if (!mainWindow) {
-    console.log('No mainWindow found')
-    return null
-  }
-
-  try {
-    const result = await dialog.showOpenDialog(mainWindow, {
-      properties: ['openFile'],
-      filters: [
-        { name: 'INI Files', extensions: ['ini'] }
-      ]
-    })
-    console.log('Dialog result:', result)
-    
-    if (!result.canceled && result.filePaths.length > 0) {
-      return result.filePaths[0]
-    }
-    return null
-  } catch (error) {
-    console.error('Dialog error:', error)
-    return null
-  }
-})
-
-// 添加保存对话框
-ipcMain.handle('save-file-dialog', async () => {
-  if (!mainWindow) return null
-
-  const result = await dialog.showSaveDialog(mainWindow, {
-    filters: [
-      { name: 'INI Files', extensions: ['ini'] }
-    ],
-    defaultPath: 'rulesmd.ini'
-  })
-
-  if (!result.canceled) {
-    return result.filePath
-  }
-  return null
-})
-
-ipcMain.handle('read-file', async (_, filePath) => {
-  try {
-    console.log('Reading file:', filePath)
-    const content = await fs.readFile(filePath, 'utf-8')
-    console.log('File content length:', content.length)
-    return content
-  } catch (error) {
-    console.error('Error reading file:', error)
-    throw error
-  }
-})
-
-ipcMain.handle('write-file', async (_, { filePath, content }) => {
-  try {
-    console.log('Writing file:', filePath)
-    await fs.writeFile(filePath, content, 'utf-8')
-    console.log('File written successfully')
-    return true
-  } catch (error) {
-    console.error('Error writing file:', error)
-    throw error
-  }
-})
 
 app.whenReady().then(createWindow)
 
@@ -173,8 +101,3 @@ app.on('activate', () => {
   }
 })
 
-// 处理未捕获的异常
-process.on('uncaughtException', (error) => {
-  console.error('Uncaught Exception:', error)
-  dialog.showErrorBox('错误', '发生了未知错误：' + error.message)
-})

@@ -24,39 +24,95 @@
         <el-icon><Download /></el-icon>
         保存修改
       </el-button>
+      <el-button 
+        type="info" 
+        :disabled="isLoading"
+        @click="handleNew"
+        class="action-button"
+      >
+        <el-icon><Plus /></el-icon>
+        新建文件
+      </el-button>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted } from 'vue'
+import { computed } from 'vue'
 import { useStore } from 'vuex'
 const { ipcRenderer } = window.require('electron')
-import { Folder, Download } from '@element-plus/icons-vue'
+import { Folder, Download, Plus } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
+import { fileUtils } from '@/utils/file'
 
 const store = useStore()
-const isModified = computed(() => store.state.isModified)
+
 const isLoading = computed(() => store.state.isLoading)
+const isModified = computed(() => store.state.isModified)
 
-
-const handleOpen = () => {
-  store.dispatch('loadConfig')
+// 处理打开文件
+const handleOpen = async () => {
+  try {
+    store.commit('setLoading', true)
+    const content = await fileUtils.readFile()
+    await store.dispatch('loadConfigFromContent', {
+      content,
+      filePath: store.getters.getCurrentFilePath
+    })
+    ElMessage.success('打开文件成功')
+  } catch (error: any) {
+    console.error('Open file error:', error)
+    ElMessage.error(`打开失败: ${error.message}`)
+  } finally {
+    store.commit('setLoading', false)
+  }
 }
 
-const handleSave = () => {
-  store.dispatch('saveConfig')
+// 处理保存文件
+const handleSave = async () => {
+  try {
+    store.commit('setLoading', true)
+    console.log('开始保存文件...')
+    
+    // 检查配置数据
+    const content = store.getters.currentConfig
+    console.log('准备保存的内容:', content)
+    
+    if (!content) {
+      throw new Error('没有可保存的配置数据')
+    }
+    
+    await fileUtils.saveFile(content)
+    store.commit('setModified', false)
+    ElMessage.success('保存成功')
+  } catch (error: any) {
+    console.error('保存文件失败:', error)
+    ElMessage.error(`保存失败: ${error.message}`)
+  } finally {
+    store.commit('setLoading', false)
+  }
 }
 
-// 监听菜单事件
-onMounted(() => {
-  ipcRenderer.on('menu-open-file', handleOpen)
-  ipcRenderer.on('menu-save-file', handleSave)
-})
-
-onUnmounted(() => {
-  ipcRenderer.removeListener('menu-open-file', handleOpen)
-  ipcRenderer.removeListener('menu-save-file', handleSave)
-})
+// 处理新建文件
+const handleNew = async () => {
+  console.log('handleNew called')
+  try {
+    store.commit('setLoading', true)
+    console.log('Calling fileUtils.newFile()')
+    const { content, filePath } = await fileUtils.newFile()
+    console.log('newFile result:', { content, filePath })
+    await store.dispatch('loadConfigFromContent', {
+      content,
+      filePath
+    })
+    ElMessage.success('新建文件成功')
+  } catch (error: any) {
+    console.error('New file error:', error)
+    ElMessage.error(`新建失败: ${error.message}`)
+  } finally {
+    store.commit('setLoading', false)
+  }
+}
 </script>
 
 <style scoped>

@@ -1,13 +1,11 @@
 import { store } from '@/store'
 import { createLogger } from '@/utils/logger'
 import { computed } from 'vue'
+import { cleanComment } from '@/utils/common'
 const logger = createLogger('Warheads')
 
 // 清理注释的辅助函数
-const cleanComment = (str: string) => {
-  // 移除分号及其后面的所有内容
-  return str.split(';')[0].trim()
-}
+
 
 // 获取弹头列表
 export const warheadsList = computed(() => {

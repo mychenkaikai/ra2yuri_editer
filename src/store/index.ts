@@ -70,7 +70,12 @@ export const store = createStore<State>({
         state.configData[cleanSection] = {}
       }
       
-      state.configData[cleanSection][cleanKey] = cleanValue
+      // 检查值是否真的改变了
+      if (state.configData[cleanSection][cleanKey] !== cleanValue) {
+        state.configData[cleanSection][cleanKey] = cleanValue
+        // 设置修改状态
+        state.isModified = true
+      }
     }
   },
   
@@ -81,6 +86,8 @@ export const store = createStore<State>({
         const config = parseConfig(payload.content)
         commit('setConfigData', config)
         commit('setCurrentFilePath', payload.filePath)
+        commit('setModified', false)
+        console.log('配置加载成功')
         return true
       } catch (error) {
         console.error('Failed to load config from content:', error)

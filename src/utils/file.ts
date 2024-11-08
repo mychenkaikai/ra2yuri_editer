@@ -1,4 +1,5 @@
 const { ipcRenderer } = window.require('electron')
+import { store } from '@/store'
 
 export const fileUtils = {
   async checkHandlers(retries = 3): Promise<string[]> {
@@ -13,7 +14,6 @@ export const fileUtils = {
       } catch (error) {
         console.warn(`Failed to check handlers (attempt ${i + 1}/${retries}):`, error)
         lastError = error
-        // 等待一小段时间后重试
         await new Promise(resolve => setTimeout(resolve, 500))
       }
     }
@@ -50,6 +50,7 @@ export const fileUtils = {
         if (!filePath) {
           throw new Error('未选择保存位置')
         }
+        store.commit('setCurrentFilePath', filePath)
       }
       
       // 保存文件内容
